@@ -1,0 +1,10 @@
+{
+  "name": "ffl-cron",
+  "version": "1.0.0",
+  "private": true,
+  "description": "FFL scheduled data refresh (Netlify function). Standalone repo so Netlify never detects unrelated frameworks.",
+  "dependencies": {
+    "@aws-sdk/client-s3": "3.1126.0",
+    "mongodb": "7.5.0"
+  }
+}
