@@ -370,6 +370,11 @@ function makeKvStore(env) {
   const accountId = String(env.CF_ACCOUNT_ID || "").trim();
   const namespaceId = String(env.KV_NAMESPACE_ID || "").trim();
   const token = String(env.CF_API_TOKEN || "").trim();
+  const looksPlaceholder = (s) => s.includes("PEGA_AQUI");
+  console.log(
+    `KV env sanity: accountIdLen=${accountId.length} namespaceIdLen=${namespaceId.length} ` +
+    `tokenLen=${token.length} placeholders=${[accountId, namespaceId, token].some(looksPlaceholder)}`
+  );
   const base = `https://api.cloudflare.com/client/v4/accounts/${accountId}/storage/kv/namespaces/${namespaceId}/values`;
   const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
   return {
