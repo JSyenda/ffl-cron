@@ -367,8 +367,11 @@ async function getDb(mongoUri) {
 // Read+Write on the namespace). Keys used: data/betball.json,
 // data/fingerprints.json.
 function makeKvStore(env) {
-  const base = `https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/storage/kv/namespaces/${env.KV_NAMESPACE_ID}/values`;
-  const headers = { Authorization: `Bearer ${env.CF_API_TOKEN}`, "Content-Type": "application/json" };
+  const accountId = String(env.CF_ACCOUNT_ID || "").trim();
+  const namespaceId = String(env.KV_NAMESPACE_ID || "").trim();
+  const token = String(env.CF_API_TOKEN || "").trim();
+  const base = `https://api.cloudflare.com/client/v4/accounts/${accountId}/storage/kv/namespaces/${namespaceId}/values`;
+  const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
   return {
     async getJson(key) {
       const res = await fetch(`${base}/${key}`, { headers: { Authorization: headers.Authorization } });
