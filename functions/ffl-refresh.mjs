@@ -387,6 +387,16 @@ function makeKvStore(env) {
 export default async (req) => {
   const env = Netlify.env.toObject();
   const started = Date.now();
+  for (const key of ["MONGODB_URI", "CF_ACCOUNT_ID", "CF_API_TOKEN", "KV_NAMESPACE_ID"]) {
+    if (!env[key]) {
+      const msg = `Missing ${key} env var (check site env vars + redeploy)`;
+      console.error(msg);
+      return new Response(JSON.stringify({ ok: false, error: msg }), {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+  }
   try {
     const db = await getDb(env.MONGODB_URI);
     const store = makeKvStore(env);
