@@ -106,8 +106,8 @@ const silent = () => {};
 async function run({ r2, clock, hookCfg } = {}) {
   return runRefresh({
     db: fakeDb,
-    r2GetJson: (k) => r2.getJson(k),
-    r2PutJson: (k, v) => r2.putJson(k, v),
+    storeGetJson: (k) => r2.getJson(k),
+    storePutJson: (k, v) => r2.putJson(k, v),
     postHook: async () => { mutable.hookCalls += 1; },
     hookCfg: hookCfg ?? { minIntervalMs: 3600000, maxPerDay: 8 },
     nowMs: clock ?? (() => T0),

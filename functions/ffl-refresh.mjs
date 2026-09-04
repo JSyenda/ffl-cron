@@ -5,8 +5,8 @@
  *  1. Computes a tiny fingerprint of the MongoDB data (latest _ids of the
  *     core collections + matches scores/states digest).
  *  2. If betball fixtures changed -> rebuilds data/betball.json and uploads
- *     it to the R2 bucket (runtime source for /betball once the site reads
- *     from R2; see README).
+ *     it to the KV namespace (runtime source for /betball once the site
+ *     reads from the reader Worker; see README).
  *  3. If core data changed (debounced: min 1h between builds, max 8/day) ->
  *     calls the Pages Deploy Hook so the site rebuilds fully fresh
  *     (export-all + all generators run in the Pages build via build:pages).
@@ -16,12 +16,11 @@
  * limit, so it only does small queries + the fixtures assembly (~2-4s).
  *
  * Env vars (Netlify site settings, browser UI only):
- *   MONGODB_URI, R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY,
- *   R2_BUCKET, DEPLOY_HOOK_URL (optional until Pages is connected),
+ *   MONGODB_URI, CF_ACCOUNT_ID, CF_API_TOKEN, KV_NAMESPACE_ID,
+ *   DEPLOY_HOOK_URL (optional until Pages is connected),
  *   HOOK_MIN_INTERVAL_MS (default 3600000), HOOK_MAX_PER_DAY (default 8)
  */
 import { MongoClient, ObjectId } from "mongodb";
-import { S3Client, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 
 export const config = { schedule: "*/5 * * * *" };
 
@@ -244,19 +243,19 @@ async function resolveTierlistsCollection(db) {
   return "tierlists";
 }
 
-async function runRefresh({ db, r2GetJson, r2PutJson, postHook, hookCfg = {}, nowMs = Date.now(), log = console.log }) {
+async function runRefresh({ db, storeGetJson, storePutJson, postHook, hookCfg = {}, nowMs = Date.now(), log = console.log }) {
   const t0 = nowMs();
   const out = { ok: true, log: [], betballUploaded: false, hookFired: false, timedOut: false };
   const say = (m) => { out.log.push(m); try { log(m); } catch {} };
   const elapsed = () => nowMs() - t0;
-  const prev = (await r2GetJson("data/fingerprints.json")) || {};
+  const prev = (await storeGetJson("data/fingerprints.json")) || {};
 
   // 1. Latest-season competitions.
   const leagues = await db.collection("competitions").find({ type: "league" }, { projection: { season: 1, year: 1, season_id: 1 } }).toArray();
   if (!leagues.length) {
-    await r2PutJson("data/betball.json", []);
+    await storePutJson("data/betball.json", []);
     const fp = { ...prev, betball: fnv1a("[]"), updatedAt: new Date(t0).toISOString() };
-    await r2PutJson("data/fingerprints.json", fp);
+    await storePutJson("data/fingerprints.json", fp);
     out.fingerprints = fp;
     return out;
   }
@@ -299,7 +298,7 @@ async function runRefresh({ db, r2GetJson, r2PutJson, postHook, hookCfg = {}, no
   const payloadJson = JSON.stringify(payload);
   const betballFp = fnv1a(payloadJson);
   if (prev.betball !== betballFp) {
-    await r2PutJson("data/betball.json", payload);
+    await storePutJson("data/betball.json", payload);
     out.betballUploaded = true;
     say(`betball.json uploaded (${payloadJson.length} bytes, ${matches.length} matches)`);
   } else {
@@ -347,13 +346,13 @@ async function runRefresh({ db, r2GetJson, r2PutJson, postHook, hookCfg = {}, no
     hookCount: out.hookFired ? hookCount + 1 : hookCount,
     matches: matches.length,
   };
-  await r2PutJson("data/fingerprints.json", fp);
+  await storePutJson("data/fingerprints.json", fp);
   out.fingerprints = fp;
   return out;
 }
 
 // ---------------------------------------------------------------------------
-// Production wiring (Netlify env + R2 over S3 API)
+// Production wiring (Netlify env + Workers KV over REST API, no extra deps)
 // ---------------------------------------------------------------------------
 let cachedClient = null;
 async function getDb(mongoUri) {
@@ -364,28 +363,23 @@ async function getDb(mongoUri) {
   return cachedClient.db();
 }
 
-function makeR2(env, S3) {
-  const s3 = new S3({
-    region: "auto",
-    endpoint: `https://${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-    credentials: { accessKeyId: env.R2_ACCESS_KEY_ID, secretAccessKey: env.R2_SECRET_ACCESS_KEY },
-  });
-  const Bucket = env.R2_BUCKET;
+// Minimal KV store client (Cloudflare API token with Workers KV Storage
+// Read+Write on the namespace). Keys used: data/betball.json,
+// data/fingerprints.json.
+function makeKvStore(env) {
+  const base = `https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/storage/kv/namespaces/${env.KV_NAMESPACE_ID}/values`;
+  const headers = { Authorization: `Bearer ${env.CF_API_TOKEN}`, "Content-Type": "application/json" };
   return {
     async getJson(key) {
-      try {
-        const res = await s3.send(new GetObjectCommand({ Bucket, Key: key }));
-        const text = await res.Body.transformToString();
-        return JSON.parse(text);
-      } catch {
-        return null;
-      }
+      const res = await fetch(`${base}/${key}`, { headers: { Authorization: headers.Authorization } });
+      if (res.status === 404) return null;
+      if (!res.ok) throw new Error(`KV read failed (${res.status})`);
+      return await res.json();
     },
     async putJson(key, value) {
       const body = typeof value === "string" ? value : JSON.stringify(value);
-      await s3.send(new PutObjectCommand({
-        Bucket, Key: key, Body: body, ContentType: "application/json", CacheControl: "public, max-age=60",
-      }));
+      const res = await fetch(`${base}/${key}`, { method: "PUT", headers, body });
+      if (!res.ok) throw new Error(`KV write failed (${res.status})`);
     },
   };
 }
@@ -395,11 +389,11 @@ export default async (req) => {
   const started = Date.now();
   try {
     const db = await getDb(env.MONGODB_URI);
-    const r2 = makeR2(env, S3Client);
+    const store = makeKvStore(env);
     const result = await runRefresh({
       db,
-      r2GetJson: (k) => r2.getJson(k),
-      r2PutJson: (k, v) => r2.putJson(k, v),
+      storeGetJson: (k) => store.getJson(k),
+      storePutJson: (k, v) => store.putJson(k, v),
       postHook: async () => {
         if (!env.DEPLOY_HOOK_URL) throw new Error("no DEPLOY_HOOK_URL");
         const res = await fetch(env.DEPLOY_HOOK_URL, { method: "POST" });
