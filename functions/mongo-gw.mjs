@@ -96,8 +96,10 @@ async function runOne(db, job) {
       return await cur.toArray()
     }
     case "aggregate": {
-      const { pipeline = [] } = job
-      return await c.aggregate(revive(pipeline)).toArray()
+      const { pipeline = [], limit } = job
+      let cur = c.aggregate(revive(pipeline))
+      if (typeof limit === "number") cur = cur.limit(limit)
+      return await cur.toArray()
     }
     case "insertOne": {
       const r = await c.insertOne(revive(job.doc))
