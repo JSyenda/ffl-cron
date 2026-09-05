@@ -24,6 +24,7 @@ const ALLOW_COLLECTIONS = new Set([
   "profilerolepoints",
   "playermanualroles",
   "goals",
+  "playermatchstats",
   "tttgames",
   "tttusers",
 ])
