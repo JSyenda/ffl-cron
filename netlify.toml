@@ -2,3 +2,9 @@
   command = "echo ok"
   publish = "site"
   functions = "functions"
+
+# Direct same-shape access (the Pages site proxies /api/* here).
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api/:splat"
+  status = 200

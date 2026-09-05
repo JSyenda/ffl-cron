@@ -4,6 +4,7 @@
   "private": true,
   "description": "FFL scheduled data refresh (Netlify function). Standalone repo so Netlify never detects unrelated frameworks.",
   "dependencies": {
+    "bson": "7.2.0",
     "mongodb": "7.5.0"
   }
 }
