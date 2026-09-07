@@ -120,8 +120,10 @@ async function runOne(db, job) {
       return { deleted: r.deletedCount }
     }
     case "findOneAndUpdate": {
-      const { filter, update } = job
-      return await c.findOneAndUpdate(revive(filter), revive(update))
+      const { filter, update, returnDocument } = job
+      return await c.findOneAndUpdate(revive(filter), revive(update), {
+        returnDocument: returnDocument === "after" ? "after" : "before",
+      })
     }
     default:
       throw new Error(`unknown op: ${op}`)
