@@ -27,6 +27,10 @@ const ALLOW_COLLECTIONS = new Set([
   "playermatchstats",
   "tttgames",
   "tttusers",
+  "seasons",
+  "competitions",
+  "matches",
+  "teammatchstats",
   // fantasy (ffl-full functions/lib/fantasy.ts)
   "fantasyseasons",
   "fantasyleagues",
