@@ -27,6 +27,28 @@ const ALLOW_COLLECTIONS = new Set([
   "playermatchstats",
   "tttgames",
   "tttusers",
+  // fantasy (ffl-full functions/lib/fantasy.ts)
+  "fantasyseasons",
+  "fantasyleagues",
+  "fantasyleaguemembers",
+  "fantasyrosters",
+  "fantasyrosterslots",
+  "fantasyweeklineups",
+  "fantasyopenweeklineups",
+  "fantasymarketdays",
+  "fantasybids",
+  "fantasyplayerprices",
+  "fantasyplayerpricehistories",
+  "fantasyweekscores",
+  "fantasyweekrewards",
+  "fantasyprocessedstats",
+  "fantasyclausechanges",
+  "fantasyclauseexecutions",
+  // ffl cards (ffl-full functions/lib/cards.ts)
+  "cardrequests",
+  "cardvotes",
+  "cardapprovalvotes",
+  "cardrequestlocks",
 ])
 
 const ALLOW_OPS = new Set([
@@ -34,7 +56,9 @@ const ALLOW_OPS = new Set([
   "find",
   "aggregate",
   "insertOne",
+  "insertMany",
   "updateOne",
+  "updateMany",
   "deleteOne",
   "deleteMany",
   "findOneAndUpdate",
@@ -105,6 +129,15 @@ async function runOne(db, job) {
     case "insertOne": {
       const r = await c.insertOne(revive(job.doc))
       return { insertedId: r.insertedId }
+    }
+    case "insertMany": {
+      const r = await c.insertMany(revive(job.docs ?? []))
+      return { insertedIds: r.insertedIds }
+    }
+    case "updateMany": {
+      const { filter, update, upsert } = job
+      const r = await c.updateMany(revive(filter), revive(update), { upsert: !!upsert })
+      return { matched: r.matchedCount, modified: r.modifiedCount, upsertedId: r.upsertedId ?? null }
     }
     case "updateOne": {
       const { filter, update, upsert } = job
