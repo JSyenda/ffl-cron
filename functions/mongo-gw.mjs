@@ -53,6 +53,9 @@ const ALLOW_COLLECTIONS = new Set([
   "cardvotes",
   "cardapprovalvotes",
   "cardrequestlocks",
+  // ffl arena friendlies (ffl-full functions/api/ffl-arena.ts)
+  "fflarenasquads",
+  "fflarenamatches",
 ])
 
 const ALLOW_OPS = new Set([
@@ -118,9 +121,10 @@ async function runOne(db, job) {
       return await c.findOne(revive(filter), projection ? { projection } : {})
     }
     case "find": {
-      const { filter = {}, projection, sort, limit } = job
+      const { filter = {}, projection, sort, skip, limit } = job
       let cur = c.find(revive(filter), projection ? { projection } : {})
       if (sort) cur = cur.sort(sort)
+      if (typeof skip === "number") cur = cur.skip(skip)
       if (typeof limit === "number") cur = cur.limit(limit)
       return await cur.toArray()
     }
